@@ -1,0 +1,31 @@
+
+server
+
+accounts[]
+
+struct acc {
+  acc_no
+  fname
+  lname
+  balance
+  transaction[]
+}
+
+// struct acc_details {
+//  acc_no
+//  fname
+// }
+
+struct transaction {
+  amount
+  date/time
+}
+
+open(struct acc) -> void // add acc struct to accounts[]
+withdraw(acc_no, amount) -> int [ 0 - success, -1 - fail ] // add transaction, modify balance
+deposit(acc_no, amount) -> int [ 0 - success, -1 - fail ] // add transaction, modify balance
+balance(acc_no) -> int 
+close(acc_no) -> int
+statement(acc_no) -> string
+
+acc=03984&amt=100
