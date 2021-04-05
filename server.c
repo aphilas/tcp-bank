@@ -18,7 +18,7 @@ typedef struct {
   void* transactions;
 } Account;
 
-typedef enum { deposit, withdraw } TransactionType;
+typedef enum { d, w } TransactionType; // name-collision with function identifiers
 
 // string_from_transaction_type(deposit) -> "deposit"
 static inline char* string_from_transaction_type(TransactionType t) {
@@ -31,6 +31,10 @@ Account* open_account(void);
 Transaction* create_transaction(int acc_no, int amount);
 Account* find_account(int acc_no);
 Transaction* get_transaction(Account* account, int index);
+int get_balance(int acc_no);
+int deposit(int acc_no, int amount); // returns 0 for success, -1 for failure
+int withdraw(int acc_no, int amount); // returns 0 for success, -1 for failure
+int close(int acc_no); // returns 0 for success, -1 for failure
 const char* timestamp_to_str(long int n);
 
 int main(){
@@ -53,8 +57,8 @@ int main(){
 	// send(client_socket, server_message, sizeof(server_message), 6);
 	// close(client_socket);
 
-	Account* account, *a1;
-	Transaction *transaction, *t1, *t2, *t3;
+	Account *a1;
+	Transaction *t1, *t2;
 
 	accounts = create(sizeof(Account));
 	open_account();
@@ -62,24 +66,27 @@ int main(){
 	a1 = find_account(1);
 	if (a1 != NULL) printf("Account number: %d\n", a1->acc_no);
 	
+	// deposit 200
 	t1 = create_transaction(1, 200);
 	if (t1 != NULL) printf("Transaction amount: %d\n", t1->amount);
 
-	// t2 = get_transaction(a1, 0);
-	// if (t2 != NULL) printf("Amount: %d\n", t2->amount);
+	t2 = get_transaction(a1, 0);
+	if (t2 != NULL) printf("Amount: %d\n", t2->amount);
 
+	// withdraw 100
 	create_transaction(1, -100);
-	t2 = get_transaction(a1, 1);
-	if (t2 != NULL) printf("Transaction amount: %d\n", t2->amount);
 
-	printf("\n\nDate: %s\nAccount no: %d\nType: %s\nAmount: %d\n", 
-		timestamp_to_str((time_t) t2->timestamp),
-		a1->acc_no, 
-		t2->amount >= 0 ? string_from_transaction_type(deposit) : string_from_transaction_type(withdraw), 
-		abs(t2->amount)
-	);
+	printf("\nWithdraw 50\n");
+	withdraw(1, 50);
+	printf("Account balance: %d\n", get_balance(1));
 
-	printf("Account balance: %d\n", a1->balance);
+	printf("\nAttempt to withdraw 100\n");
+	withdraw(1, 100);
+	printf("Account balance: %d\n", get_balance(1));
+
+	printf("\nDeposit 200\n");
+	deposit(1, 200);
+	printf("Account balance: %d\n\n", get_balance(1));
 
 	return 0;
 }
@@ -146,6 +153,91 @@ Transaction* create_transaction(int acc_no, int amount) {
 	account->balance += amount;
 
 	return transaction;
+}
+
+// get balance of account with specified account number
+int get_balance(int acc_no) {
+	Account *account;
+	
+	account = find_account(acc_no);
+	if (account == NULL) {
+		printf("Account not found\n");
+		return 0;
+	}
+
+	return account->balance;
+}
+
+// deposit money to account with specified account number
+int deposit(int acc_no, int amount) {
+	Account *account;
+	Transaction *transaction;
+	
+	account = find_account(acc_no);
+	if (account == NULL) {
+		printf("Account not found\n");
+		return -1;
+	}
+
+	if (amount < 0) {
+		printf("Deposit should be more than zero\n");
+		return -1;
+	}
+
+	transaction = create_transaction(acc_no, amount);
+
+	if (transaction == NULL) {
+		printf("Transaction failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+// withdraw money from account with specified account number
+int withdraw(int acc_no, int amount) {
+	Account *account;
+	Transaction *transaction;
+	
+	account = find_account(acc_no);
+	if (account == NULL) {
+		printf("Account not found\n");
+		return -1;
+	}
+
+	if (account->balance < amount) {
+		printf("Balance is not enough\n");
+		return -1;
+	}
+
+	if (amount > 0) {
+		amount = -amount;
+	}
+
+	transaction = create_transaction(acc_no, amount);
+
+	if (transaction == NULL) {
+		printf("Transaction failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+// not tested
+int close(int acc_no) {
+	Account *account;
+	
+	account = find_account(acc_no);
+	if (account == NULL) {
+		printf("Account not found\n");
+		return -1;
+	}
+
+	delete(account->transactions);
+	// delete(account);
+
+	return 0;
 }
 
 // convert UNIX timestamp to date and time string
