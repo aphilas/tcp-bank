@@ -34,7 +34,7 @@ Transaction* get_transaction(Account* account, int index);
 int get_balance(int acc_no);
 int deposit(int acc_no, int amount); // returns 0 for success, -1 for failure
 int withdraw(int acc_no, int amount); // returns 0 for success, -1 for failure
-int close(int acc_no); // returns 0 for success, -1 for failure
+void statement(int acc_no, char* buf, int buf_size);
 const char* timestamp_to_str(long int n);
 
 int main(){
@@ -257,6 +257,45 @@ int close(int acc_no) {
 	// delete(account);
 
 	return 0;
+}
+
+// generate statement from account number
+void statement(int acc_no, char* buf, int buf_size) {
+	Account *account;
+	Transaction *transaction;
+	int no_of_transactions;
+	char string[512]; // FIX
+
+	account = find_account(acc_no);
+
+	if (account == NULL) {
+		printf("Account not found\n");
+		return;
+	}
+
+	no_of_transactions = ((Vector *)(account->transactions))->used;
+
+	for (int i = 0; i < no_of_transactions; i++) {
+		long int timestamp;
+		int amount;
+		char temp[128] = "";
+
+		transaction = get_transaction(account, i);
+
+		if (transaction == NULL) {
+			continue;
+		}	
+
+		sprintf(temp, "\nDate: %s\nType: %s\nAmount: %d\n", 
+			timestamp_to_str((time_t) transaction->timestamp),
+			transaction->amount >= 0 ? string_from_transaction_type(d) : string_from_transaction_type(w), 
+			abs(transaction->amount)
+		);
+		strcat(string, temp);
+	}
+
+	strncpy(buf, string, buf_size-1);
+	buf[buf_size-1] = '\0';
 }
 
 // convert UNIX timestamp to date and time string
