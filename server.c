@@ -4,8 +4,9 @@
 #include <sys/socket.h> 
 #include <netinet/in.h> 
 #include <unistd.h>
-#include "vector/vector.h"
 #include <time.h>
+#include <string.h>
+#include "vector/vector.h"
 
 typedef struct {
 	long int timestamp;
@@ -18,14 +19,6 @@ typedef struct {
   void* transactions;
 } Account;
 
-typedef enum { d, w } TransactionType; // name-collision with function identifiers
-
-// string_from_transaction_type(deposit) -> "deposit"
-static inline char* string_from_transaction_type(TransactionType t) {
-	static const char *strings[] = { "deposit", "withdraw" };
-	return (char*) strings[t];
-}
-
 Vector* accounts;
 Account* open_account(void);
 Transaction* create_transaction(int acc_no, int amount);
@@ -34,8 +27,24 @@ Transaction* get_transaction(Account* account, int index);
 int get_balance(int acc_no);
 int deposit(int acc_no, int amount); // returns 0 for success, -1 for failure
 int withdraw(int acc_no, int amount); // returns 0 for success, -1 for failure
+int	close_account(int acc_no); // returns 0 for success, -1 for failure
 void statement(int acc_no, char* buf, int buf_size);
 const char* timestamp_to_str(long int n);
+	
+typedef enum { o, d, w, s, c, b } TransactionType;
+
+static inline char* string_from_transaction_type(TransactionType t) {
+	static const char *strings[] = { "open account", "deposit", "withdraw", "get statement", "close account", "balance" };
+	return (char*) strings[t];
+}
+
+typedef struct {
+	TransactionType transactionType;
+	float amount;
+} ClientMessage;
+
+ClientMessage parse_message(const char * message);
+void process_message(ClientMessage clientMessage, char *buf, int buf_size);
 
 int main(){
 	accounts = create(sizeof(Account));
@@ -75,39 +84,102 @@ int main(){
 	return 0;
 }
 
+// o, d, w, s, c, b
+void process_message(ClientMessage clientMessage, char *buf, int buf_size) {
+	Account* account;
+	int result;
+	float balance;
+	static char string[256];
+	char statement_string[512];
+ 
+	switch (clientMessage.transactionType) {
+		case o: 
+			account = open_account();
 
-	Account *a1;
-	Transaction *t1, *t2;
+			if (account == NULL ) {
+				strncpy(buf, "There was an error opening the account. Please try again.", buf_size-1);
+				buf[buf_size-1] = '\0';
+			} else {
+				strncpy(buf, "Account opened successfully.", buf_size-1);
+				buf[buf_size-1] = '\0';
+			}
+			break;
 
-	accounts = create(sizeof(Account));
-	open_account();
+		case d:
+			result = deposit(1, clientMessage.amount); // TODO: update i -> f
 
-	a1 = find_account(1);
-	if (a1 != NULL) printf("Account number: %d\n", a1->acc_no);
+			if (result == 0) { 
+				strncpy(buf, "Deposit successful", buf_size-1);
+				buf[buf_size-1] = '\0';
+			} else {
+				strncpy(buf, "Deposit failed", buf_size-1);
+				buf[buf_size-1] = '\0';
+			}
+			break;
+
+		case w:
+			result = withdraw(1, clientMessage.amount); // TODO: update i -> f
+
+			if (result == 0) { 
+				strncpy(buf, "Withdrawal successful", buf_size-1);
+				buf[buf_size-1] = '\0';
+			} else if (result == -2) {
+				strncpy(buf, "You have insufficient funds", buf_size-1);
+				buf[buf_size-1] = '\0';
+			} else {
+				strncpy(buf, "Withdrawal failed", buf_size-1);
+				buf[buf_size-1] = '\0';
+			}
+			break;
+
+		case s:
+			statement(1, statement_string, sizeof(statement_string));
+			strncpy(buf, statement_string, buf_size-1);
+			buf[buf_size-1] = '\0';
+			break;
+
+		case c:
+			result = close_account(1);
+			if (result == 0) { 
+				strncpy(buf, "Account closure successful", buf_size-1);
+				buf[buf_size-1] = '\0';
+			} else {
+				strncpy(buf, "Account closure failed", buf_size-1);
+				buf[buf_size-1] = '\0';
+			}
+			break;
+
+		case b:
+			balance = get_balance(1); // TODO
+			sprintf(string, "Your balance is %.2f\n", balance);
+			strncpy(buf, string, buf_size-1);
+			buf[buf_size-1] = '\0';
+			break;
+	}
+}
+
+ClientMessage parse_message(const char *message) {
+	ClientMessage clientMessage;
+
+	char *string = NULL;
+	string = strdup(message);
 	
-	// deposit 200
-	t1 = create_transaction(1, 200);
-	if (t1 != NULL) printf("Transaction amount: %d\n", t1->amount);
+	char *token = strtok(string, ",");
 
-	t2 = get_transaction(a1, 0);
-	if (t2 != NULL) printf("Amount: %d\n", t2->amount);
+	if (token != NULL) {
+		clientMessage.transactionType = (TransactionType) atoi(token);
 
-	// withdraw 100
-	create_transaction(1, -100);
+		token = strtok(NULL, ",");
 
-	printf("\nWithdraw 50\n");
-	withdraw(1, 50);
-	printf("Account balance: %d\n", get_balance(1));
+		if (token != NULL) {
+			clientMessage.amount = atof(token);
+		} else {
+			clientMessage.amount = 0.0;
+		}
+	}
 
-	printf("\nAttempt to withdraw 100\n");
-	withdraw(1, 100);
-	printf("Account balance: %d\n", get_balance(1));
-
-	printf("\nDeposit 200\n");
-	deposit(1, 200);
-	printf("Account balance: %d\n\n", get_balance(1));
-
-	return 0;
+	free(string);
+	return clientMessage;
 }
 
 // create account with 1-based index as account no.
@@ -226,7 +298,7 @@ int withdraw(int acc_no, int amount) {
 
 	if (account->balance < amount) {
 		printf("Balance is not enough\n");
-		return -1;
+		return -2;
 	}
 
 	if (amount > 0) {
@@ -244,7 +316,7 @@ int withdraw(int acc_no, int amount) {
 }
 
 // not tested
-int close(int acc_no) {
+int close_account(int acc_no) {
 	Account *account;
 	
 	account = find_account(acc_no);
